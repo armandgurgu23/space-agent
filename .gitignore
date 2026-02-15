@@ -2,3 +2,8 @@ __pycache__
 data/
 .pytest_cache
 .venv
+run_cc.sh
+*.zip
+.env
+.DS_Store
+*.db
