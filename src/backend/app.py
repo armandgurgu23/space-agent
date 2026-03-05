@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
-from typing import Dict
 from src.backend.models.server_models import StartChatResponse, ChatResponse, ChatMessage, ChatHistory
+from src.backend.database_handlers.sq3_handler import ChatDatabase
 import uuid
 from datetime import datetime
 import uvicorn
@@ -11,8 +11,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# In-memory storage for chat sessions (use a database in production)
-chat_sessions: Dict[str, dict] = {}
+db = ChatDatabase(db_path='./chat_sessions.db')
 
 # Endpoints
 @app.get("/")
@@ -34,16 +33,12 @@ def start_chat():
     """
     session_id = str(uuid.uuid4())
     
-    # Initialize session with empty message history
-    chat_sessions[session_id] = {
-        "created_at": datetime.now(),
-        "messages": []
-    }
+    chat_session = db.create_session(session_id)
     
     return StartChatResponse(
         session_id=session_id,
         message="Chat session created successfully. Use this session_id to send messages.",
-        created_at=chat_sessions[session_id]["created_at"]
+        created_at=chat_session["created_at"]
     )
 
 
@@ -60,21 +55,18 @@ def chat_with_space(session_id: str, chat_message: ChatMessage):
         ChatResponse with the assistant's reply
     """
     # Check if session exists
-    if session_id not in chat_sessions:
+    if not db.session_exists(session_id):
         raise HTTPException(
             status_code=404,
             detail=f"Session {session_id} not found. Please start a new chat session."
         )
-    
-    # Get the session
-    session = chat_sessions[session_id]
-    
+        
     # Store user message
-    session["messages"].append({
-        "role": "user",
-        "content": chat_message.message,
-        "timestamp": datetime.now().isoformat()
-    })
+    db.add_message(
+        session_id=session_id,
+        role="user",
+        content=chat_message.message
+    )
     
     # TODO: Replace this with actual LLM integration
     # For now, using a simple echo response
@@ -87,11 +79,16 @@ def chat_with_space(session_id: str, chat_message: ChatMessage):
     # )
     
     # Store assistant response
-    session["messages"].append({
-        "role": "assistant",
-        "content": assistant_response,
-        "timestamp": datetime.now().isoformat()
-    })
+    # session["messages"].append({
+    #     "role": "assistant",
+    #     "content": assistant_response,
+    #     "timestamp": datetime.now().isoformat()
+    # })
+    db.add_message(
+        session_id=session_id,
+        role="assistant",
+        content= assistant_response
+    )
     
     return ChatResponse(
         session_id=session_id,
@@ -106,15 +103,19 @@ def get_chat_history(session_id: str):
     """
     Retrieve the complete chat history for a session.
     """
-    if session_id not in chat_sessions:
+    if not db.session_exists(session_id):
         raise HTTPException(
             status_code=404,
             detail=f"Session {session_id} not found."
         )
     
+    chat_messages = db.get_messages(
+        session_id=session_id
+    )
+    
     return ChatHistory(
         session_id=session_id,
-        messages=chat_sessions[session_id]["messages"]
+        messages=chat_messages
     )
 
 
@@ -123,13 +124,13 @@ def delete_session(session_id: str):
     """
     Delete a chat session and its history.
     """
-    if session_id not in chat_sessions:
+    if not db.session_exists(session_id):
         raise HTTPException(
             status_code=404,
             detail=f"Session {session_id} not found."
         )
     
-    del chat_sessions[session_id]
+    db.delete_session(session_id)
     return {"message": f"Session {session_id} deleted successfully"}
 
 
