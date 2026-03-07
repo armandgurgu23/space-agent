@@ -18,8 +18,10 @@ class ChatResponse(BaseModel):
     user_message: str
     assistant_response: str
     timestamp: datetime
+    session_ended: bool
 
 
 class ChatHistory(BaseModel):
     session_id: str
     messages: List[Dict[str, str]]
+    session_ended: bool

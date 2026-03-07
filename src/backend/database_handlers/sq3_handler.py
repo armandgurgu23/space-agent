@@ -40,7 +40,8 @@ class ChatDatabase:
                 CREATE TABLE IF NOT EXISTS sessions (
                     session_id TEXT PRIMARY KEY,
                     created_at TIMESTAMP NOT NULL,
-                    updated_at TIMESTAMP NOT NULL
+                    updated_at TIMESTAMP NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'open'
                 )
             """)
             
@@ -86,8 +87,8 @@ class ChatDatabase:
         try:
             cursor.execute(
                 """
-                INSERT INTO sessions (session_id, created_at, updated_at)
-                VALUES (?, ?, ?)
+                INSERT INTO sessions (session_id, created_at, updated_at, status)
+                VALUES (?, ?, ?, 'open')
                 """,
                 (session_id, created_at, created_at)
             )
@@ -96,7 +97,8 @@ class ChatDatabase:
             return {
                 "session_id": session_id,
                 "created_at": created_at,
-                "updated_at": created_at
+                "updated_at": created_at,
+                "status": "open"
             }
         except Exception as e:
             conn.rollback()
@@ -200,7 +202,34 @@ class ChatDatabase:
             return messages
         finally:
             conn.close()
-    
+
+    def close_session(self, session_id: str) -> bool:
+        """
+        Close a chat session.
+
+        Args:
+            session_id: Session to close
+
+        Returns:
+            bool: True if session was closed, False if not found
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                "UPDATE sessions SET status = 'closed' WHERE session_id = ?",
+                (session_id,)
+            )
+            closed = cursor.rowcount > 0
+            conn.commit()
+            return closed
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
     def delete_session(self, session_id: str) -> bool:
         """
         Delete a session and all its messages.
@@ -253,6 +282,7 @@ class ChatDatabase:
                     s.session_id, 
                     s.created_at, 
                     s.updated_at,
+                    s.status,
                     COUNT(m.id) as message_count
                 FROM sessions s
                 LEFT JOIN messages m ON s.session_id = m.session_id
@@ -281,7 +311,7 @@ class ChatDatabase:
         try:
             cursor.execute(
                 """
-                SELECT session_id, created_at, updated_at
+                SELECT session_id, created_at, updated_at, status
                 FROM sessions 
                 WHERE session_id = ?
                 """,

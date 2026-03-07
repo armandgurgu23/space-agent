@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from src.backend.models.server_models import StartChatResponse, ChatResponse, ChatMessage, ChatHistory
 from src.backend.database_handlers.sq3_handler import ChatDatabase
+from src.backend.space_assistants.llama_assistant import LlamaSpaceAssistant
 import uuid
 from datetime import datetime
 import uvicorn
@@ -12,6 +13,7 @@ app = FastAPI(
 )
 
 db = ChatDatabase(db_path='./chat_sessions.db')
+llama_assistant = LlamaSpaceAssistant()
 
 # Endpoints
 @app.get("/")
@@ -54,47 +56,57 @@ def chat_with_space(session_id: str, chat_message: ChatMessage):
     Returns:
         ChatResponse with the assistant's reply
     """
+
+    current_session = db.get_session(session_id)
+
     # Check if session exists
-    if not db.session_exists(session_id):
+    if not current_session:
         raise HTTPException(
             status_code=404,
             detail=f"Session {session_id} not found. Please start a new chat session."
         )
+    
+    if current_session['status'] == 'closed':
+        raise HTTPException(
+            status_code=410,
+            detail=f"Session {session_id} found but is already closed! Please start a new chat session."
+        )
+
+    
+    chat_history = db.get_messages(
+        session_id=session_id
+    )
         
-    # Store user message
+    # TODO: Replace this with actual LLM integration
+    # For now, using a simple echo response
+    assistant_response, should_chat_end = llama_assistant(
+        current_user_message=chat_message.message,
+        chat_history=chat_history
+    )
+
+    # Store user and assistant messages for history tracking.
     db.add_message(
         session_id=session_id,
         role="user",
         content=chat_message.message
     )
     
-    # TODO: Replace this with actual LLM integration
-    # For now, using a simple echo response
-    assistant_response = f"Echo: {chat_message.message}"
-    
-    # In production, you would call your LLM here:
-    # assistant_response = call_llm_api(
-    #     messages=session["messages"],
-    #     model="your-model"
-    # )
-    
-    # Store assistant response
-    # session["messages"].append({
-    #     "role": "assistant",
-    #     "content": assistant_response,
-    #     "timestamp": datetime.now().isoformat()
-    # })
     db.add_message(
         session_id=session_id,
         role="assistant",
         content= assistant_response
     )
+
+    if should_chat_end:
+        # Session has reached a natural end as determined by the assistant.
+        db.close_session(session_id)
     
     return ChatResponse(
         session_id=session_id,
         user_message=chat_message.message,
         assistant_response=assistant_response,
-        timestamp=datetime.now()
+        timestamp=datetime.now(),
+        session_ended=should_chat_end
     )
 
 
@@ -103,19 +115,23 @@ def get_chat_history(session_id: str):
     """
     Retrieve the complete chat history for a session.
     """
-    if not db.session_exists(session_id):
+
+    current_session = db.get_session(session_id)
+
+    if not current_session:
         raise HTTPException(
             status_code=404,
             detail=f"Session {session_id} not found."
         )
-    
+        
     chat_messages = db.get_messages(
         session_id=session_id
     )
     
     return ChatHistory(
         session_id=session_id,
-        messages=chat_messages
+        messages=chat_messages,
+        session_ended=current_session['status'] == 'closed'
     )
 
 
