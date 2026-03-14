@@ -13,7 +13,9 @@ app = FastAPI(
 )
 
 db = ChatDatabase(db_path='./chat_sessions.db')
-llama_assistant = LlamaSpaceAssistant()
+llama_assistant = LlamaSpaceAssistant(
+    prompt_templates_path='src/backend/prompts/llama_prompts'
+)
 
 # Endpoints
 @app.get("/")
