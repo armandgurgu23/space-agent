@@ -1,10 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from src.backend.models.server_models import StartChatResponse, ChatResponse, ChatMessage, ChatHistory
 from src.backend.database_handlers.sq3_handler import ChatDatabase
-from src.backend.space_assistants.llama_assistant import LlamaSpaceAssistant
+from src.backend.space_assistants.llama_assistant import SpaceChatAssistant
 import uuid
 from datetime import datetime
 import uvicorn
+from dotenv import load_dotenv
+from os import environ
+
+load_dotenv('src/backend/.env')
 
 app = FastAPI(
     title="Chat Assistant API",
@@ -13,8 +17,9 @@ app = FastAPI(
 )
 
 db = ChatDatabase(db_path='./chat_sessions.db')
-llama_assistant = LlamaSpaceAssistant(
-    prompt_templates_path='src/backend/prompts/llama_prompts'
+space_assistant = SpaceChatAssistant(
+    prompt_templates_path='src/backend/prompts/llama_prompts',
+    model_name=environ['MODEL_NAME']
 )
 
 # Endpoints
@@ -81,7 +86,7 @@ def chat_with_space(session_id: str, chat_message: ChatMessage):
         
     # TODO: Replace this with actual LLM integration
     # For now, using a simple echo response
-    assistant_response, should_chat_end = llama_assistant(
+    assistant_response, should_chat_end = space_assistant(
         current_user_message=chat_message.message,
         chat_history=chat_history
     )
@@ -151,6 +156,24 @@ def delete_session(session_id: str):
     db.delete_session(session_id)
     return {"message": f"Session {session_id} deleted successfully"}
 
+@app.post("/end_chat/{session_id}")
+def end_chat(session_id: str):
+    """
+    Marks a chat session as closed in the DB. This is triggered
+    manually by the user via the frontend.
+    """
+
+    current_session = db.get_session(session_id)
+
+    if not current_session:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found.")
+
+    if current_session['status'] == 'closed':
+        raise HTTPException(status_code=410, detail=f"Session {session_id} is already closed.")
+
+    db.close_session(session_id)
+    return {"message": f"Session {session_id} ended successfully."}
+
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=4005)
+    uvicorn.run(app, host=environ['HOST_NAME'], port=int(environ['HOST_PORT']))

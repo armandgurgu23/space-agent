@@ -7,3 +7,4 @@ run_cc.sh
 .env
 .DS_Store
 *.db
+.env

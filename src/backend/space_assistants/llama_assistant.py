@@ -4,7 +4,7 @@ from src.backend.utils.jinja_utils import render_prompt
 from ollama import chat
 
 
-class LlamaSpaceAssistant(object):
+class SpaceChatAssistant(object):
 
     def __init__(self, prompt_templates_path:str, model_name:str = "llama3.2:3b"):
         self.model_name = model_name
