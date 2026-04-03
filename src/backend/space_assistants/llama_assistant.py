@@ -2,6 +2,12 @@ from src.backend.models.server_models import ChatHistory
 from jinja2 import Environment, FileSystemLoader
 from src.backend.utils.jinja_utils import render_prompt
 from ollama import chat
+from pydantic import BaseModel
+
+
+class AssistantMessage(BaseModel):
+    message:str
+    should_chat_end:bool
 
 
 class SpaceChatAssistant(object):
@@ -40,13 +46,16 @@ class SpaceChatAssistant(object):
     def make_llm_call(self, messages:list[dict]):
         return chat(
             model=self.model_name,
-            messages=messages
+            messages=messages,
+            format=AssistantMessage.model_json_schema()
         )
     
     def extract_assistant_message_from_response(self, llm_response):
         # TODO: Logic to parse assistant response. May want to add database logging
         # here when doing tool calls.
-        return llm_response.message.content
+        generated_content = llm_response.message.content
+        generated_content = AssistantMessage.model_validate_json(generated_content)
+        return generated_content.message, generated_content.should_chat_end
     
     def get_assistant_response(self, current_user_message:str, chat_history:ChatHistory):
         # TODO: Integrate LLM based chat. For now echo back.
@@ -58,5 +67,5 @@ class SpaceChatAssistant(object):
         
         current_messages = self.prepare_messages_for_llm_call(current_user_message, chat_history)
         llm_response = self.make_llm_call(current_messages)
-        assistant_response = self.extract_assistant_message_from_response(llm_response)        
+        assistant_response, should_chat_end = self.extract_assistant_message_from_response(llm_response)        
         return assistant_response, should_chat_end
