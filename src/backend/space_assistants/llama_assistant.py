@@ -1,13 +1,10 @@
 from src.backend.models.server_models import ChatHistory
 from jinja2 import Environment, FileSystemLoader
 from src.backend.utils.jinja_utils import render_prompt
+from src.backend.space_assistants.tool_definitions.space_api_tools import get_latest_space_news
+from src.backend.space_assistants.tool_definitions import message_user
 from ollama import chat
-from pydantic import BaseModel
 
-
-class AssistantMessage(BaseModel):
-    message:str
-    should_chat_end:bool
 
 
 class SpaceChatAssistant(object):
@@ -47,15 +44,28 @@ class SpaceChatAssistant(object):
         return chat(
             model=self.model_name,
             messages=messages,
-            format=AssistantMessage.model_json_schema()
+            tools=[get_latest_space_news, message_user]
         )
     
     def extract_assistant_message_from_response(self, llm_response):
-        # TODO: Logic to parse assistant response. May want to add database logging
-        # here when doing tool calls.
-        generated_content = llm_response.message.content
-        generated_content = AssistantMessage.model_validate_json(generated_content)
-        return generated_content.message, generated_content.should_chat_end
+        response_generation = llm_response.message
+        if not response_generation.tool_calls:
+            # TODO: Figure out what the best fallback strategy is here. For now defaulting to a generic ERROR message to track how many times this happens.
+            return 'ERROR: I could not understand your intent. Please try again.', False      
+        if len(response_generation.tool_calls) > 1:
+            raise RuntimeError('Model responded with parallel tool calls instead of just 1 tool call. Unexpected behaviour.')
+        
+        generated_tool = response_generation.tool_calls[0].function.model_dump()
+
+        if generated_tool['name'] == 'message_user':
+            # The communication tool does not need to be executed.
+            return generated_tool['arguments']['message'], generated_tool['arguments']['should_chat_end']
+        
+        print('TODO: Handle cases where we generate a tool to execute!!!!!')
+        breakpoint()
+
+        return 
+
     
     def get_assistant_response(self, current_user_message:str, chat_history:ChatHistory):
         # TODO: Integrate LLM based chat. For now echo back.
@@ -67,5 +77,8 @@ class SpaceChatAssistant(object):
         
         current_messages = self.prepare_messages_for_llm_call(current_user_message, chat_history)
         llm_response = self.make_llm_call(current_messages)
+        print('\n\n')
+        print(llm_response)
+        print('\n\n')
         assistant_response, should_chat_end = self.extract_assistant_message_from_response(llm_response)        
         return assistant_response, should_chat_end

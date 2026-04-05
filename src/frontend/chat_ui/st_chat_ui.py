@@ -60,7 +60,7 @@ class ChatUI:
         with col2:
             if st.session_state.session_ended:
                 if st.button("Start New Session", type="primary"):
-                    self._handle_reset()
+                    self._handle_new_session()
             else:
                 if st.button("Reset", type="secondary"):
                     self._handle_reset()
@@ -114,10 +114,29 @@ class ChatUI:
         except requests.exceptions.RequestException as e:
             st.error(f"Failed to end chat session: {str(e)}")
 
+    def _handle_new_session(self):
+        """Handle the Start New Session button click.
+
+        The previous session was already cleanly closed via end_chat, so we
+        leave it intact on the backend and simply start a fresh session.
+        """
+        st.session_state.messages = []
+        st.session_state.session_ended = False
+        st.session_state.has_interaction = False
+
+        try:
+            data = self.chat_client.start_chat()
+            st.session_state.session_id = data["session_id"]
+        except requests.exceptions.RequestException as e:
+            st.session_state.session_id = None
+            st.error(f"Failed to start new chat session: {str(e)}")
+
+        st.rerun()
+
     def _handle_reset(self):
-        """Handle the reset button click.
+        """Handle the Reset button click.
         
-        Deletes the current session entirely and starts a fresh one.
+        Deletes the current active session entirely and starts a fresh one.
         """
         try:
             self.chat_client.delete_session(st.session_state.session_id)
