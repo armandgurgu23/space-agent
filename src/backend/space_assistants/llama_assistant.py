@@ -5,6 +5,8 @@ from src.backend.space_assistants.tool_definitions.space_api_tools import get_la
 from src.backend.space_assistants.tool_definitions import message_user
 from ollama import chat
 
+import logging
+logger = logging.getLogger(__name__)
 
 
 class SpaceChatAssistant(object):
@@ -59,6 +61,7 @@ class SpaceChatAssistant(object):
 
         if generated_tool['name'] == 'message_user':
             # The communication tool does not need to be executed.
+            logger.info('Assistant generated a message to the end user!')
             return generated_tool['arguments']['message'], generated_tool['arguments']['should_chat_end']
         
         print('TODO: Handle cases where we generate a tool to execute!!!!!')

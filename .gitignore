@@ -8,3 +8,4 @@ run_cc.sh
 .DS_Store
 *.db
 .env
+logs/

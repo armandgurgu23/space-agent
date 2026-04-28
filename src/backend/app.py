@@ -7,8 +7,10 @@ from datetime import datetime
 import uvicorn
 from dotenv import load_dotenv
 from os import environ
+from src.backend.logging_config import configure_logging, get_uvicorn_log_config
 
 load_dotenv('src/backend/.env')
+configure_logging()
 
 app = FastAPI(
     title="Chat Assistant API",
@@ -176,4 +178,4 @@ def end_chat(session_id: str):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host=environ['HOST_NAME'], port=int(environ['HOST_PORT']))
+    uvicorn.run(app, host=environ['HOST_NAME'], port=int(environ['HOST_PORT']), log_config=get_uvicorn_log_config())
